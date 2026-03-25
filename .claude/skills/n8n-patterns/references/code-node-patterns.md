@@ -207,3 +207,42 @@ return [{ json: eventData }];
 - [ ] Variables de otro nodo con nombre exacto case-sensitive
 - [ ] try-catch para HTTP/APIs externas
 - [ ] Testeado con pinned data
+
+## Expression Gotchas — Errores por frecuencia
+
+Basado en analisis de 38,094 instancias de Code nodes en 15,202 workflows reales.
+
+| # | Error | Freq. | Contexto Resummo | Fix |
+|---|-------|-------|-----------------|-----|
+| 1 | `$json.campo` sin `.body` en webhook | ~46% | Webhook de Culqi/ManyChat: datos viven en `$json.body.email`, NO `$json.email` | Siempre `$json.body.X` para webhooks externos |
+| 2 | `.first()` sobre nodo sin output | ~15% | Si Google Sheets no encuentra row, `.first()` es `undefined` → TypeError en `.json` | Validar: `$("Nodo").first()?.json?.campo` |
+| 3 | `{{ }}` dentro de Code node | ~8% | Usar JS directo: `$input.first().json.body.email` (no `{{ $json.body.email }}`) | Ya documentado arriba — reforzar: Code = JS puro |
+| 4 | `$now` sin timezone explicito | ~7% | `$now` usa timezone del workflow settings. Si settings no tiene timezone, usa UTC | Siempre `$now.setZone('America/Lima')` o configurar timezone en workflow settings |
+| 5 | `.toDateTime()` con string vacio | ~5% | Campo `fecha_pago` vacio en Google Sheets → `Invalid DateTime` silencioso | Validar: `$json.fecha ? $json.fecha.toDateTime() : null` |
+| 6 | Template literal `${}` dentro de `{{ }}` | ~4% | Doble interpolacion: `` {{ `Hola ${$json.nombre}` }} `` falla | En expresiones usar ternario: `{{ $json.nombre ? 'Hola ' + $json.nombre : 'Hola' }}`. En Code nodes SI se puede usar template literals |
+| 7 | `$input.all()` vs `$input.first()` cuando vacio | ~3% | `all()` retorna `[]` (array vacio), `first()` retorna `undefined`. Null-checks distintos | Para all: `if (items.length === 0)`. Para first: `if (!first)` |
+
+## Validation Checklist por Tipo de Nodo
+
+Checks obligatorios antes de deploy para cada nodo que usa Resummo:
+
+| Nodo | Checks |
+|------|--------|
+| **Webhook** | `rawBody: true` si valida firma HMAC. Path unico por workflow. `responseMode` correcto (`lastNode` si necesita respuesta custom, `onReceived` si asincrono). `executionTimeout` en settings (60s) |
+| **Code** | Return `[{json:{}}]`. No `{{ }}`. Null checks con `?.` y `??`. Try-catch para `$helpers.httpRequest()`. Modo correcto (All Items 95%, Each Item 5%). Variables de otro nodo con nombre exacto case-sensitive |
+| **Google Sheets** | Credential type nativo (no Code node como workaround). `mappingMode: defineBelow` con mapeo explicito (NO `autoMapInputData`). Sheet name o ID correcto. Filtro por columna correcta en lookups |
+| **HTTP Request** | Auth configurado (header, bearer, o credential). `retryOnFail: true`, `maxTries: 3`, `waitBetweenTries: 2000`. Timeout razonable (10-30s). `Content-Type: application/json` si envia body. Manejo diferenciado 4xx (no reintentar) vs 5xx (reintentar) |
+| **IF** | Condicion usa tipo correcto (string/number/boolean). Case sensitivity en comparacion de strings. `leftValue` no es `undefined` (validar nodo previo). Usar `exists` / `not exists` para campos opcionales |
+| **Respond to Webhook** | Solo UNO por branch de ejecucion (dos responds = error). `responseCode` correcto (200, 400, 401). Body es JSON valido. Ubicar ANTES de nodos lentos (Notion, Sheets) para evitar timeout de Culqi |
+
+## Anti-patrones n8n — Evitar en produccion
+
+| # | Anti-patron | Riesgo | Correccion |
+|---|------------|--------|-----------|
+| 1 | Google Sheets con `mappingMode: autoMapInputData` | Si cambian headers en el sheet, el mapeo se rompe silenciosamente | `mappingMode: defineBelow` con mapeo explicito campo por campo |
+| 2 | HTTP Request sin `retryOnFail` | Un timeout de Notion API (3 req/s) o Google Sheets pierde la transaccion | `retryOnFail: true`, `maxTries: 3`, `waitBetweenTries: 2000` |
+| 3 | Webhook sin `executionTimeout` en settings | Workflow colgado consume recursos del VPS indefinidamente | `executionTimeout: 60` para webhooks, `3600` para reportes cron |
+| 4 | Code node sin try-catch para `$helpers.httpRequest()` | Error HTTP no capturado detiene todo el workflow | Envolver en try-catch, retornar error como dato para que el flujo continue |
+| 5 | IF node con `leftValue` que puede ser `undefined` | Toma branch equivocado silenciosamente (undefined != false) | Usar optional chaining en nodo previo o validar con nodo Set antes del IF |
+| 6 | Respond to Webhook DESPUES de nodos lentos | Culqi/ManyChat timeout (10-30s) si Notion o Sheets tardan | Responder ANTES de procesar: Respond 200 → luego Sheets/Notion en paralelo |
+| 7 | Configurar nodo nativo via API deploy sin exportar de UI | Credential references y parametros internos pueden no coincidir | Configurar en UI de n8n, exportar JSON, usar ese JSON como referencia para deploys |

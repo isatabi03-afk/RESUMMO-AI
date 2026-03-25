@@ -174,9 +174,21 @@ Update:  Google Sheets node → Operation: Update Row → Match by row number
 
 ### Fase 4: Deployment
 - [ ] Backup local del workflow en `automations/n8n/`
+- [ ] `errorWorkflow` configurado en settings (apunta a workflow de error-handler)
+- [ ] `executionTimeout` configurado (60s para webhooks, 3600s para reportes cron)
+- [ ] `retryOnFail: true` en nodos que llaman APIs externas (Notion, Sheets, Drive, email)
+- [ ] `onError: continueErrorOutput` en nodos no-criticos (Slack, analytics) para no detener flujo principal
+- [ ] `saveDataErrorExecution: all` para poder debuggear fallos en produccion
 - [ ] Workflow activado
 - [ ] Test con caso real (modo sandbox si es pago)
 - [ ] Documentar en `automations/README.md`
+
+### Fase 5: Post-Deploy Verification
+- [ ] Verificar primeras 3 ejecuciones en produccion (sin errores inesperados)
+- [ ] Confirmar que `errorWorkflow` se dispara correctamente (testear con error intencional si es posible)
+- [ ] Kill switch documentado: `POST /api/v1/workflows/{id}/deactivate` — saber desactivar rapido si algo sale mal
+- [ ] Rollback plan: backup JSON guardado en `automations/n8n/`, saber revertir via `PUT /api/v1/workflows/{id}`
+- [ ] Rate limits no excedidos bajo carga real (Google Sheets 300/min, Notion 3/s, ManyChat timeout 10s)
 
 ## Gotchas
 

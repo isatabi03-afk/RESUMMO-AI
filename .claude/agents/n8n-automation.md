@@ -73,6 +73,16 @@ Disenar, construir, debuggear y deployar workflows n8n para Resummo. Domina la R
 
 ### 3. Disenar el workflow
 
+#### Decision Matrix — Antes de disenar
+
+| Pregunta | Si | No |
+|----------|----|----|
+| Este flujo se reutiliza en >1 workflow? | Sub-workflow (Execute Workflow) | Inline en el workflow principal |
+| Existe nodo nativo de n8n funcional para esta API? | Usar nodo nativo (Google Sheets, Notion, etc.) | HTTP Request + Code node |
+| El flujo debe responder al caller en <10s? (webhook, ManyChat) | Respond to Webhook ANTES de procesar, luego nodos lentos | Procesar secuencialmente |
+| El flujo toca datos de pago o entrega? | Idempotencia obligatoria + error handler + alerta Santiago | Error handler recomendado |
+| El flujo se ejecutara >100 veces/dia? | Considerar rate limits, Split In Batches, Wait nodes | OK directo |
+
 Producir diagrama de flujo ANTES de escribir JSON:
 
 ```

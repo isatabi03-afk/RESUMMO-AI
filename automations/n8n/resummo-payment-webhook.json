@@ -19,7 +19,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse y validar payload de CulqiLink webhook\nconst body = $json.body || $json;\nconst headers = $json.headers || {};\n\n// Mapeo de precios a paquetes (montos en centimos)\nconst PACKAGES = {\n  4900: { slug: 'ciencias-basicas', name: 'Ciencias Basicas' },\n  7900: { slug: 'essalud-enam', name: 'EsSalud/ENAM' },\n  11900: { slug: 'all-access', name: 'All Access' },\n  3900: { slug: 'encaps', name: 'ENCAPS (Anki)' }\n};\n\n// Notion Page IDs por paquete\nconst NOTION_PAGES = {\n  'ciencias-basicas': '2ee28574-650f-80c4-bdc2-f043e19f4f0b',\n  'essalud-enam': '2f428574-650f-80d3-aafc-cb5374c44e14',\n  'all-access': '2ed28574-650f-804e-85ce-ee3fc1bf4631',\n  'encaps': '31e28574-650f-8058-b3f3-e6140913476e'\n};\n\n// Drive link para ENCAPS/Anki\nconst DRIVE_LINK = 'https://drive.google.com/drive/folders/1l2NYW_6ICSK1DWwlB3hT7WGW3YAc_J9T';\n\n// Extraer datos del payload de CulqiLink\n// CulqiLink puede enviar datos en diferentes formatos\n// Adaptaremos segun el payload real que recibamos\nconst rawPayload = JSON.stringify(body, null, 2);\n\n// Intentar extraer campos comunes\nconst amount = body.amount || body.total_amount || body.object?.amount || 0;\nconst email = body.email || body.customer_email || body.object?.email || body.metadata?.email || '';\nconst name = body.customer_name || body.metadata?.customer_name || body.object?.antifraud_details?.first_name || '';\nconst orderId = body.id || body.order_id || body.object?.id || `manual_${Date.now()}`;\nconst status = body.status || body.state || body.object?.outcome?.type || 'unknown';\nconst currency = body.currency_code || body.currency || body.object?.currency_code || 'PEN';\n\n// Detectar paquete por monto\nconst pkg = PACKAGES[amount] || { slug: 'desconocido', name: `Monto: ${amount}` };\nconst notionPageId = NOTION_PAGES[pkg.slug] || '';\nconst includesAnki = pkg.slug === 'all-access' || pkg.slug === 'encaps';\n\n// Timestamp Peru\nconst now = new Date();\nconst peruTime = new Date(now.getTime() - 5 * 60 * 60 * 1000);\nconst fechaPago = peruTime.toISOString().replace('T', ' ').substring(0, 19);\n\nreturn {\n  json: {\n    // Datos procesados\n    email,\n    nombre: name,\n    paquete: pkg.name,\n    paqueteSlug: pkg.slug,\n    monto: amount / 100, // Convertir centimos a soles\n    montoRaw: amount,\n    orderId,\n    status,\n    currency,\n    fechaPago,\n    notionPageId,\n    includesAnki,\n    driveLink: includesAnki ? DRIVE_LINK : '',\n    // Debug: payload completo para ver estructura real\n    rawPayload,\n    // Validacion\n    isValid: email !== '' && amount > 0,\n    validationErrors: [\n      ...(email === '' ? ['Email vacio'] : []),\n      ...(amount === 0 ? ['Monto es 0'] : []),\n      ...(pkg.slug === 'desconocido' ? [`Monto ${amount} no mapea a ningun paquete`] : [])\n    ]\n  }\n};"
+        "jsCode": "// Parse y validar payload de CulqiLink webhook\n// Soporta charge.creation.succeeded (tarjeta/Yape) y order.status.changed (billeteras)\nconst body = $json.body || $json;\nconst headers = $json.headers || {};\n\n// Normalizar: CulqiLink puede enviar datos en body directo o dentro de body.object\nconst data = body.object || body;\n\n// Paquetes por description (titulo del CulqiLink) — resuelve precios repetidos\nconst PACKAGES = {\n  'resummo select':       { slug: 'select',       name: 'Resummo SELECT',       notionPage: '2ee28574-650f-80c4-bdc2-f043e19f4f0b', anki: false },\n  'resummo basicas':      { slug: 'basicas',      name: 'Resummo BASICAS',      notionPage: '2ee28574-650f-80c4-bdc2-f043e19f4f0b', anki: false },\n  'resummo core':         { slug: 'core',         name: 'Resummo CORE',         notionPage: '2ee28574-650f-80c4-bdc2-f043e19f4f0b', anki: false },\n  'resummo core clinicas':{ slug: 'core-clinicas', name: 'Resummo CORE Clinicas',notionPage: '2ee28574-650f-80c4-bdc2-f043e19f4f0b', anki: false },\n  'resummo core basicas': { slug: 'core-basicas', name: 'Resummo CORE Basicas', notionPage: '2ee28574-650f-80c4-bdc2-f043e19f4f0b', anki: false },\n  'resummo essalud/enam': { slug: 'essalud-enam', name: 'Resummo ESSALUD/ENAM', notionPage: '2f428574-650f-80d3-aafc-cb5374c44e14', anki: false },\n  'resummo all access':   { slug: 'all-access',   name: 'Resummo ALL ACCESS',   notionPage: '2ed28574-650f-804e-85ce-ee3fc1bf4631', anki: true },\n  'resummo anki':         { slug: 'anki',         name: 'Resummo ANKI',         notionPage: '31e28574-650f-8058-b3f3-e6140913476e', anki: true },\n  'resummo encaps':       { slug: 'encaps',       name: 'Resummo ENCAPS',       notionPage: '31e28574-650f-8058-b3f3-e6140913476e', anki: true }\n};\n\n// Fallback por monto (solo para precios unicos)\nconst PACKAGES_BY_AMOUNT = {\n  2900:  'resummo select',\n  13900: 'resummo essalud/enam',\n  15900: 'resummo all access'\n};\n\nconst DRIVE_LINK = 'https://drive.google.com/drive/folders/1l2NYW_6ICSK1DWwlB3hT7WGW3YAc_J9T';\n\n// Extraer campos normalizados\nconst rawPayload = JSON.stringify(body, null, 2);\nconst amount = data.amount || body.amount || 0;\nconst email = data.email || body.email || data.customer_email || body.metadata?.email || '';\nconst customerName = data.customer_name || body.metadata?.customer_name || data.antifraud_details?.first_name || '';\nconst orderId = data.id || body.id || body.order_id || 'unknown_' + Date.now();\nconst status = data.status || data.state || data.outcome?.type || 'unknown';\nconst currency = data.currency_code || body.currency_code || 'PEN';\nconst description = (data.description || body.description || '').toLowerCase().trim();\n\n// Detectar paquete: primero por description, fallback por monto\nlet pkg = PACKAGES[description];\nif (!pkg && PACKAGES_BY_AMOUNT[amount]) {\n  pkg = PACKAGES[PACKAGES_BY_AMOUNT[amount]];\n}\nif (!pkg) {\n  pkg = { slug: 'desconocido', name: 'Desconocido (desc: ' + description + ', monto: ' + amount + ')', notionPage: '', anki: false };\n}\n\nconst fechaPago = $now.toFormat('yyyy-MM-dd HH:mm:ss');\n\nreturn {\n  json: {\n    email,\n    nombre: customerName,\n    paquete: pkg.name,\n    paqueteSlug: pkg.slug,\n    monto: amount / 100,\n    montoRaw: amount,\n    orderId,\n    status,\n    currency,\n    fechaPago,\n    notionPageId: pkg.notionPage,\n    includesAnki: pkg.anki,\n    driveLink: pkg.anki ? DRIVE_LINK : '',\n    description,\n    rawPayload,\n    isValid: email !== '' && amount > 0,\n    validationErrors: [\n      ...(email === '' ? ['Email vacio'] : []),\n      ...(amount === 0 ? ['Monto es 0'] : []),\n      ...(pkg.slug === 'desconocido' ? ['Paquete no identificado: ' + description + ' / ' + amount] : [])\n    ]\n  }\n};"
       },
       "id": "a1b2c3d4-0002-4000-8000-000000000002",
       "name": "Parse y Validar",
@@ -57,73 +57,87 @@
     },
     {
       "parameters": {
-        "jsCode": "// Formatear mensaje de venta para Slack con link Notion accionable\nconst data = $json;\n\n// URLs de Notion por paquete (para que Andre/Nair hagan click y compartan)\nconst NOTION_URLS = {\n  'ciencias-basicas': 'https://www.notion.so/2ee28574650f80c4bdc2f043e19f4f0b',\n  'essalud-enam': 'https://www.notion.so/2f428574650f80d3aafccb5374c44e14',\n  'all-access': 'https://www.notion.so/2ed28574650f804e85ceee3fc1bf4631',\n  'encaps': 'https://www.notion.so/31e28574650f8058b3f3e6140913476e'\n};\n\nconst notionUrl = NOTION_URLS[data.paqueteSlug] || '';\nconst driveLink = data.driveLink || '';\n\nconst slackMessage = {\n  text: `Nueva venta: ${data.paquete} - ${data.email}`,\n  blocks: [\n    {\n      type: 'header',\n      text: {\n        type: 'plain_text',\n        text: 'Nueva Venta Resummo',\n        emoji: true\n      }\n    },\n    {\n      type: 'section',\n      fields: [\n        { type: 'mrkdwn', text: `*Paquete:*\\n${data.paquete}` },\n        { type: 'mrkdwn', text: `*Monto:*\\nS/${data.monto}` },\n        { type: 'mrkdwn', text: `*Cliente:*\\n${data.nombre || 'No proporcionado'}` },\n        { type: 'mrkdwn', text: `*Fecha:*\\n${data.fechaPago}` }\n      ]\n    },\n    {\n      type: 'divider'\n    },\n    {\n      type: 'section',\n      text: {\n        type: 'mrkdwn',\n        text: `*Email del comprador (copiar):*\\n\\`${data.email}\\``\n      }\n    },\n    {\n      type: 'section',\n      text: {\n        type: 'mrkdwn',\n        text: `*Paso 1:* Abrir pagina Notion del paquete:\\n<${notionUrl}|Abrir ${data.paquete} en Notion>\\n\\n*Paso 2:* Click \\\"Share\\\" arriba a la derecha → pegar email → invitar como Guest`\n      }\n    },\n    ...(data.includesAnki ? [{\n      type: 'section',\n      text: {\n        type: 'mrkdwn',\n        text: `*Paso 3 (Anki):* Compartir carpeta Drive con el mismo email:\\n<${driveLink}|Abrir carpeta Anki en Drive>`\n      }\n    }] : []),\n    {\n      type: 'context',\n      elements: [\n        { type: 'mrkdwn', text: `Order: ${data.orderId}` }\n      ]\n    }\n  ]\n};\n\nreturn { json: { ...data, slackMessage } };"
-      },
-      "id": "a1b2c3d4-0004-4000-8000-000000000004",
-      "name": "Preparar Slack",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [750, 200]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.SLACK_WEBHOOK_VENTAS || 'PLACEHOLDER_SLACK_WEBHOOK' }}",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.slackMessage) }}",
-        "options": {}
-      },
-      "id": "a1b2c3d4-0005-4000-8000-000000000005",
-      "name": "Slack Ventas",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1000, 200],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Preparar fila para Google Sheets — mapear a columnas detectadas por nodo nativo\n// El nodo nativo detecta headers de fila 2: col_1, INGRESOS, col_3, col_4, col_5, col_6, col_7, col_8, col_9\nconst data = $json;\n\n// Formatear fecha como DD/MM/YYYY\nconst parts = data.fechaPago.split(' ')[0].split('-');\nconst fechaFormateada = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : data.fechaPago;\n\nreturn {\n  json: {\n    // Mapeo a nombres de columna detectados por nodo nativo Google Sheets\n    'INGRESOS': fechaFormateada,\n    'col_3': data.nombre || data.email,\n    'col_4': data.paquete.toUpperCase(),\n    'col_5': 'CULQILINK',\n    'col_6': 'ANDRÉ',\n    'col_7': data.monto,\n    'col_8': '',\n    'col_9': data.email,\n    // Pasar datos originales para nodos siguientes\n    ...data\n  }\n};"
-      },
-      "id": "a1b2c3d4-0006-4000-8000-000000000006",
-      "name": "Preparar Sheets",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [750, 400]
-    },
-    {
-      "parameters": {
-        "operation": "append",
+        "authentication": "serviceAccount",
+        "operation": "read",
         "documentId": {
           "__rl": true,
           "value": "1La_yPtgv8HYNlJZ1JCDfAGGOxzAwnSnUAI1ezxlQRgI",
           "mode": "list",
-          "cachedResultName": "Finanzas - Resummo"
+          "cachedResultName": "Finanzas - Resummo",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1La_yPtgv8HYNlJZ1JCDfAGGOxzAwnSnUAI1ezxlQRgI/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
-          "value": "Marzo26",
+          "value": 778844821,
           "mode": "list",
-          "cachedResultName": "Marzo26"
+          "cachedResultName": "Marzo26",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1La_yPtgv8HYNlJZ1JCDfAGGOxzAwnSnUAI1ezxlQRgI/edit#gid=778844821"
         },
-        "columns": {
-          "mappingMode": "autoMapInputData",
-          "value": {}
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "col_8",
+              "lookupValue": "={{ $json.orderId }}"
+            }
+          ]
         },
+        "combineFilters": "AND",
         "options": {}
       },
-      "id": "a1b2c3d4-0011-4000-8000-000000000011",
-      "name": "Google Sheets Append",
+      "id": "a1b2c3d4-0012-4000-8000-000000000012",
+      "name": "Check Duplicado",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [1000, 400],
+      "position": [750, 300],
+      "alwaysOutputData": true,
       "credentials": {
-        "googleSheetsApi": {
+        "googleApi": {
           "id": "JKf7Jh92E9Sv1aD8",
           "name": "Google Sheets - Resummo"
         }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-duplicate",
+              "leftValue": "={{ $json.col_8 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
       },
-      "onError": "continueRegularOutput"
+      "id": "a1b2c3d4-0013-4000-8000-000000000013",
+      "name": "Ya Existe?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ received: true, duplicate: true, orderId: $('Parse y Validar').first().json.orderId }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "a1b2c3d4-0014-4000-8000-000000000014",
+      "name": "Responder Duplicado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1250, 200]
     },
     {
       "parameters": {
@@ -137,7 +151,79 @@
       "name": "Responder OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1250, 300]
+      "position": [1250, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Formatear mensaje de venta para Slack con link Notion accionable\nconst data = $('Parse y Validar').first().json;\n\n// URLs de Notion por paquete (para que Andre/Nair hagan click y compartan)\nconst NOTION_URLS = {\n  'select':       'https://www.notion.so/2ee28574650f80c4bdc2f043e19f4f0b',\n  'basicas':      'https://www.notion.so/2ee28574650f80c4bdc2f043e19f4f0b',\n  'core':         'https://www.notion.so/2ee28574650f80c4bdc2f043e19f4f0b',\n  'core-clinicas':'https://www.notion.so/2ee28574650f80c4bdc2f043e19f4f0b',\n  'core-basicas': 'https://www.notion.so/2ee28574650f80c4bdc2f043e19f4f0b',\n  'essalud-enam': 'https://www.notion.so/2f428574650f80d3aafccb5374c44e14',\n  'all-access':   'https://www.notion.so/2ed28574650f804e85ceee3fc1bf4631',\n  'anki':         'https://www.notion.so/31e28574650f8058b3f3e6140913476e',\n  'encaps':       'https://www.notion.so/31e28574650f8058b3f3e6140913476e'\n};\n\nconst notionUrl = NOTION_URLS[data.paqueteSlug] || '';\nconst driveLink = data.driveLink || '';\n\nconst slackMessage = {\n  text: `Nueva venta: ${data.paquete} - ${data.email}`,\n  blocks: [\n    {\n      type: 'header',\n      text: {\n        type: 'plain_text',\n        text: 'Nueva Venta Resummo',\n        emoji: true\n      }\n    },\n    {\n      type: 'section',\n      fields: [\n        { type: 'mrkdwn', text: `*Paquete:*\\n${data.paquete}` },\n        { type: 'mrkdwn', text: `*Monto:*\\nS/${data.monto}` },\n        { type: 'mrkdwn', text: `*Cliente:*\\n${data.nombre || 'No proporcionado'}` },\n        { type: 'mrkdwn', text: `*Fecha:*\\n${data.fechaPago}` }\n      ]\n    },\n    {\n      type: 'divider'\n    },\n    {\n      type: 'section',\n      text: {\n        type: 'mrkdwn',\n        text: `*Email del comprador (copiar):*\\n\\`${data.email}\\``\n      }\n    },\n    {\n      type: 'section',\n      text: {\n        type: 'mrkdwn',\n        text: `*Paso 1:* Abrir pagina Notion del paquete:\\n<${notionUrl}|Abrir ${data.paquete} en Notion>\\n\\n*Paso 2:* Click \\\"Share\\\" arriba a la derecha → pegar email → invitar como Guest`\n      }\n    },\n    ...(data.includesAnki ? [{\n      type: 'section',\n      text: {\n        type: 'mrkdwn',\n        text: `*Paso 3 (Anki):* Compartir carpeta Drive con el mismo email:\\n<${driveLink}|Abrir carpeta Anki en Drive>`\n      }\n    }] : []),\n    {\n      type: 'context',\n      elements: [\n        { type: 'mrkdwn', text: `Order: ${data.orderId}` }\n      ]\n    }\n  ]\n};\n\nreturn { json: { slackMessage } };"
+      },
+      "id": "a1b2c3d4-0004-4000-8000-000000000004",
+      "name": "Preparar Slack",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_VENTAS }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.slackMessage) }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0005-4000-8000-000000000005",
+      "name": "Slack Ventas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1750, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar fila para Google Sheets — SOLO campos de Sheets, sin ...data\nconst data = $('Parse y Validar').first().json;\n\n// Formatear fecha como DD/MM/YYYY\nconst parts = data.fechaPago.split(' ')[0].split('-');\nconst fechaFormateada = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : data.fechaPago;\n\nreturn {\n  json: {\n    'INGRESOS': fechaFormateada,\n    'col_3': data.nombre || data.email,\n    'col_4': data.paquete.toUpperCase(),\n    'col_5': 'CULQILINK',\n    'col_6': 'ANDRÉ',\n    'col_7': data.monto,\n    'col_8': data.orderId,\n    'col_9': data.email\n  }\n};"
+      },
+      "id": "a1b2c3d4-0006-4000-8000-000000000006",
+      "name": "Preparar Sheets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 500]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1La_yPtgv8HYNlJZ1JCDfAGGOxzAwnSnUAI1ezxlQRgI",
+          "mode": "list",
+          "cachedResultName": "Finanzas - Resummo"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 778844821,
+          "mode": "list",
+          "cachedResultName": "Marzo26",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1La_yPtgv8HYNlJZ1JCDfAGGOxzAwnSnUAI1ezxlQRgI/edit#gid=778844821"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0011-4000-8000-000000000011",
+      "name": "Google Sheets Append",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1750, 500],
+      "credentials": {
+        "googleApi": {
+          "id": "JKf7Jh92E9Sv1aD8",
+          "name": "Google Sheets - Resummo"
+        }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -156,7 +242,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.SLACK_WEBHOOK_ERRORES || $env.SLACK_WEBHOOK_VENTAS || 'PLACEHOLDER_SLACK_WEBHOOK' }}",
+        "url": "={{ $env.SLACK_WEBHOOK_ERRORES || $env.SLACK_WEBHOOK_VENTAS }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ text: 'ERROR en Resummo Payment: Payload invalido recibido. Errors: ' + JSON.stringify($json.validationErrors) + '. Raw: ' + $json.rawPayload.substring(0, 500) }) }}",
@@ -171,15 +257,15 @@
     },
     {
       "parameters": {
-        "content": "## Resummo Payment Webhook v2\n\nRecibe webhooks de CulqiLink (order.creation.succeeded).\n\n### Flujo:\n1. Webhook POST de CulqiLink\n2. Parse: email, nombre, monto → detecta paquete\n3. Si valido: Slack #ventas (con link Notion + email) + Google Sheets\n4. Si invalido: Slack #errores + Responde 200\n\n### Entrega Notion: SEMI-MANUAL\nSlack muestra link Notion + email. Andre/Nair comparten manualmente.\n\n### TODO:\n- [ ] Configurar SLACK_WEBHOOK_VENTAS en n8n environment\n- [ ] Configurar Google Sheets credential (Service Account)\n- [ ] Testear con payload real de CulqiLink\n- [ ] Fase 2: automatizar Notion guest invite",
-        "height": 420,
-        "width": 380
+        "content": "## Resummo Payment Webhook v5\n\nRecibe webhooks de CulqiLink.\nSoporta charge + order events.\n\n### Flujo:\n1. Webhook POST de CulqiLink\n2. Parse: detecta paquete por DESCRIPTION\n3. Valida payload (email + monto > 0)\n4. Check idempotencia (orderId en Sheets)\n5. Responde 200 INMEDIATAMENTE\n6. Slack #ventas + Google Sheets (paralelo)\n\n### Paquetes:\nSELECT S/29, BASICAS S/99, CORE S/99,\nESSALUD/ENAM S/139, ALL ACCESS S/159,\nANKI S/79, ENCAPS S/79\n\n### Config:\n- [x] Slack webhook OK\n- [x] Google Sheets credential OK\n- [x] Sheets tab: Marzo26 (GID 778844821)\n- [x] Test curl exitoso (2026-03-25)\n- [ ] Webhook URL en panel Culqi\n- [ ] Test con payload real de Culqi",
+        "height": 480,
+        "width": 400
       },
       "id": "a1b2c3d4-0010-4000-8000-000000000010",
       "name": "Notas",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-350, 150]
+      "position": [-400, 100]
     }
   ],
   "connections": {
@@ -196,12 +282,34 @@
     "Es Valido?": {
       "main": [
         [
-          { "node": "Preparar Slack", "type": "main", "index": 0 },
-          { "node": "Preparar Sheets", "type": "main", "index": 0 }
+          { "node": "Check Duplicado", "type": "main", "index": 0 }
         ],
         [
           { "node": "Slack Error", "type": "main", "index": 0 },
           { "node": "Responder Error", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Check Duplicado": {
+      "main": [
+        [{ "node": "Ya Existe?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ya Existe?": {
+      "main": [
+        [
+          { "node": "Responder Duplicado", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Responder OK", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Responder OK": {
+      "main": [
+        [
+          { "node": "Preparar Slack", "type": "main", "index": 0 },
+          { "node": "Preparar Sheets", "type": "main", "index": 0 }
         ]
       ]
     },
@@ -210,19 +318,9 @@
         [{ "node": "Slack Ventas", "type": "main", "index": 0 }]
       ]
     },
-    "Slack Ventas": {
-      "main": [
-        [{ "node": "Responder OK", "type": "main", "index": 0 }]
-      ]
-    },
     "Preparar Sheets": {
       "main": [
         [{ "node": "Google Sheets Append", "type": "main", "index": 0 }]
-      ]
-    },
-    "Google Sheets Append": {
-      "main": [
-        [{ "node": "Responder OK", "type": "main", "index": 0 }]
       ]
     }
   },
