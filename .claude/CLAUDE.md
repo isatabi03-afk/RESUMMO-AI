@@ -108,6 +108,7 @@ Ver `.claude/rules/` — fuente de verdad para:
 - `/iterate-from-dms` — DMs reales de Instagram → bugs → ajustes al agente IA
 - `/sales-analytics` — Metricas de venta, conversion, CPA, LTV
 - `/content-review` — Revisar y validar contenido de paquetes antes de publicar
+- `/n8n-patterns` — Patrones de workflows n8n: pagos, entrega Notion, agente IA, reportes
 
 ## Ciclo de verificacion
 

@@ -4,6 +4,8 @@
 - [project_status.md](project_status.md) — Estado actual del proyecto por fase del roadmap
 - [andre_nair_preferences.md](andre_nair_preferences.md) — Preferencias y decisiones de los founders
 - [technical_decisions.md](technical_decisions.md) — Decisiones tecnicas con razonamiento
+- [user_santiago.md](user_santiago.md) — Perfil de Santiago Zavaleta (FIXU AI, GitHub, email)
+- [amboss_research.md](amboss_research.md) — Investigacion exhaustiva AMBOSS: fundadores, funding ($292M), producto, gaps en espanol, oportunidad Resummo
 
 ## Estado actual (Mar 2026)
 - **Fase:** 0 — Setup inicial

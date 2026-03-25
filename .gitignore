@@ -4,6 +4,9 @@
 *.key
 credentials.json
 service-account.json
+fixu-ai-claude-code*.json
+automations/n8n/fixu-ai-claude-code*.json
+automations/n8n/_deploy-payload.json
 
 # Node
 node_modules/
