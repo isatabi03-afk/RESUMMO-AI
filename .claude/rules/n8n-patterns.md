@@ -4,6 +4,11 @@
 - n8n self-hosted en VPS de FIXU AI (compartido con otros proyectos)
 - Community Edition — NO soporta Variables nativas ($vars requiere licencia)
 - Usar PLACEHOLDER_* en nodos para valores dinamicos
+- **Version actual del VPS:** verificar con `GET /api/v1/` antes de implementar (relevante para breaking changes v2.x)
+- **Breaking changes v2.0+ a considerar:**
+  - Execute Sub-Workflow node: parametro `workflowId` ahora es obligatorio (antes opcional)
+  - Wait node: formularios requieren configuracion diferente
+  - Node versioning: algunos nodos tienen version 1 y 2, comportamiento distinto
 
 ## Workflows principales
 
@@ -89,3 +94,23 @@ Headers: `X-N8N-API-KEY: <jwt>`
 - n8n CE NO soporta Variables nativas → usar PLACEHOLDER_*
 - Webhook paths deben ser unicos por workflow
 - ManyChat External Request tiene timeout de ~10s → mantener flujos rapidos
+- Static Data solo persiste en ejecuciones de produccion (workflow activo) — no en ejecuciones manuales
+- Sin queue mode en CE (requiere Redis + Enterprise) — un worker, no escala horizontalmente
+- AI Agent node disponible desde n8n v1.20+; Vector Store como tool desde v1.74+
+
+## Workflows en produccion
+| # | Workflow | Estado | Archivo |
+|---|---------|--------|---------|
+| 1 | payment-webhook | ACTIVO | `automations/n8n/resummo-payment-webhook.json` |
+| 2 | notion-delivery | PENDIENTE | — |
+| 3 | confirmation-sender | PENDIENTE | — |
+| 4 | drive-delivery | PENDIENTE | — |
+| 5 | manychat-backend | PENDIENTE | — |
+| 6 | lead-registration | PENDIENTE | — |
+| 7 | daily-report | PENDIENTE | — |
+| 8 | error-handler | PENDIENTE | — |
+
+## Referencias adicionales
+- `.claude/rules/n8n-ai-agents.md` — patrones de AI Agent node
+- `docs/arquitectura/n8n-expert-reference.md` — referencia tecnica completa
+- `.claude/skills/n8n-patterns/SKILL.md` — skill con patrones, expresiones y checklist

@@ -201,8 +201,228 @@ Update:  Google Sheets node → Operation: Update Row → Match by row number
 - **ManyChat External Request timeout** — 10 segundos max, mantener flujos rapidos
 - **n8n CE sin Variables** — usar PLACEHOLDER_* o Code node con lookup table
 
+## HTTP Request Avanzado
+
+### Batching nativo
+```
+HTTP Request node → Add Option → Batching
+- batchSize: 10 (items por request)
+- batchInterval: 1000 (ms entre batches)
+Usar cuando: invitar >10 usuarios a Notion, compartir >10 carpetas Drive
+```
+
+### Pagination automatica
+```json
+// En HTTP Request node → Add Option → Pagination
+{
+  "paginationMode": "responseContainsNextURL",
+  "nextURL": "={{ $response.body.next_cursor }}",
+  "completeExpression": "={{ !$response.body.has_more }}"
+}
+// Para cursor-based (Notion, Stripe):
+// paginationMode: "updateAParameterInEachRequest"
+// parameterName: "starting_after" | "cursor" | "page_token"
+```
+
+### Rate limit monitoring
+```javascript
+// En Code node post-request — leer headers de rate limit
+const remaining = parseInt($input.first().json.headers['x-ratelimit-remaining'] || '100');
+const resetAt = parseInt($input.first().json.headers['x-ratelimit-reset'] || '0');
+if (remaining < 10) {
+  const waitMs = (resetAt * 1000) - Date.now() + 500;
+  return [{ json: { ...$input.first().json, _waitMs: Math.max(waitMs, 1000) } }];
+}
+return $input.all();
+// Conectar a Wait node: {{ $json._waitMs }}ms si _waitMs > 0
+```
+
+### fullResponse para debug
+```json
+// En HTTP Request node → Options → Full Response: ON
+// Expone: $json.status, $json.headers, $json.body
+// Usar en desarrollo para ver headers completos y status codes
+```
+
+### Retry directo en nodo
+```json
+// Settings del nodo HTTP Request
+{
+  "retryOnFail": true,
+  "maxTries": 3,
+  "waitBetweenTries": 1000
+}
+```
+
+## Integracion ManyChat — Schema y Patrones
+
+### Input de ManyChat External Request
+```json
+{
+  "subscriber_id": "12345678",
+  "first_name": "Juan",
+  "last_name": "Perez",
+  "last_input_text": "hola quiero ver el paquete All Access",
+  "gender": "male",
+  "profile_pic_url": "...",
+  "locale": "es_LA",
+  "timezone": "America/Lima",
+  "custom_fields": {
+    "paquete_interes": "All Access",
+    "es_cliente": "false"
+  }
+}
+```
+
+### Respuesta esperada para ManyChat (< 10 segundos)
+```json
+{
+  "version": "v2",
+  "content": {
+    "messages": [
+      { "type": "text", "text": "Hola Juan! 👋 ..." },
+      { "type": "text", "text": "El paquete All Access incluye..." }
+    ],
+    "actions": [
+      { "action": "set_field_value", "field_name": "es_cliente", "value": "false" }
+    ],
+    "quick_replies": [
+      { "type": "text", "title": "Ver precios 💰", "payload": "PRECIOS" },
+      { "type": "text", "title": "Ver ejemplos 📚", "payload": "EJEMPLOS" }
+    ]
+  }
+}
+```
+
+### Pattern timeout-safe (CRITICO — ManyChat corta a 10s)
+```
+Webhook → Extract subscriber_id + last_input_text
+  → Google Sheets Lookup (< 1s) — es cliente existente?
+  → IF cliente:
+    → Build respuesta personalizada (Code node, < 2s)
+    → Respond to Webhook (< 3s total)
+  → IF no cliente:
+    → Build respuesta generica (Code node, < 1s)
+    → Respond to Webhook (< 2s total)
+    → DESPUES de responder: HTTP Request → registrar lead (async)
+
+NUNCA: llamar LLM sincrono antes de responder
+NUNCA: hacer >2 llamadas a APIs externas antes de responder
+```
+
+## Integraciones Especificas
+
+### Culqi — Validacion HMAC
+```javascript
+// Code node — validar firma de webhook Culqi
+const crypto = require('crypto');
+const rawBody = $input.first().json.rawBody || '';
+const signature = $input.first().json.headers['x-culqi-signature'] || '';
+const secret = $env.CULQI_WEBHOOK_SECRET;
+
+const computed = crypto
+  .createHmac('sha256', secret)
+  .update(rawBody, 'utf8')
+  .digest('hex');
+
+const isValid = crypto.timingSafeEqual(
+  Buffer.from(computed, 'hex'),
+  Buffer.from(signature, 'hex')
+);
+return [{ json: { isValid, rawBody } }];
+```
+
+### Notion — Compartir pagina (workaround API)
+```javascript
+// Notion no tiene endpoint nativo de "share page with email"
+// Workaround 1: Crear page con parent = workspace page + cover + invitar via email
+// HTTP Request:
+// POST https://api.notion.com/v1/pages
+// Headers: Authorization: Bearer $env.NOTION_TOKEN, Notion-Version: 2022-06-28
+// Body:
+{
+  "parent": { "page_id": "NOTION_PAGE_ID_DEL_PAQUETE" },
+  "properties": {
+    "title": [{ "text": { "content": "Acceso " + paquete + " - " + nombre } }]
+  }
+}
+// Workaround 2: Shared link publico (sin autenticacion) — menos seguro
+// GET https://api.notion.com/v1/pages/{page_id} → share_url en response
+```
+
+### Google Drive — Compartir carpeta
+```javascript
+// HTTP Request al Google Drive API v3
+// POST https://www.googleapis.com/drive/v3/files/{FOLDER_ID}/permissions
+// Auth: OAuth2 con scope drive.file o drive
+// Body:
+{
+  "role": "reader",
+  "type": "user",
+  "emailAddress": email
+}
+// sendNotificationEmail: false para no enviar email de Drive (manejamos nosotros el email)
+```
+
+### Email transaccional — Resend
+```javascript
+// HTTP Request
+// POST https://api.resend.com/emails
+// Headers: Authorization: Bearer $env.RESEND_API_KEY
+// Body:
+{
+  "from": "Resummo <noreply@resummo.com>",
+  "to": [email],
+  "subject": "Tu acceso a Resummo esta listo 🎉",
+  "html": htmlContent
+}
+```
+
+### GA4 — Server-side Purchase Event
+```javascript
+// HTTP Request
+// POST https://www.google-analytics.com/mp/collect?measurement_id=G-XXXXX&api_secret=$env.GA4_API_SECRET
+// Body:
+{
+  "client_id": subscriber_id || transaction_id,
+  "events": [{
+    "name": "purchase",
+    "params": {
+      "transaction_id": transaction_id,
+      "value": monto,
+      "currency": "PEN",
+      "items": [{ "item_name": paquete, "price": monto, "quantity": 1 }]
+    }
+  }]
+}
+```
+
+### Meta Conversions API — Purchase
+```javascript
+// HTTP Request
+// POST https://graph.facebook.com/v18.0/{PIXEL_ID}/events?access_token=$env.META_CAPI_TOKEN
+// Body:
+{
+  "data": [{
+    "event_name": "Purchase",
+    "event_time": Math.floor(Date.now() / 1000),
+    "event_id": transaction_id,  // Para deduplicacion con pixel browser
+    "user_data": {
+      "em": [sha256(email.toLowerCase())]  // Email hasheado
+    },
+    "custom_data": {
+      "value": monto,
+      "currency": "PEN",
+      "content_name": paquete
+    },
+    "action_source": "website"
+  }]
+}
+```
+
 ## Referencias
 - `${CLAUDE_SKILL_DIR}/references/code-node-patterns.md` — patrones de Code nodes JS
 - `.claude/rules/n8n-patterns.md` — reglas obligatorias de deploy
+- `.claude/rules/n8n-ai-agents.md` — patrones de AI Agent node
 - `.claude/rules/payment-automation.md` — flujo de pagos
 - `.claude/rules/notion-delivery.md` — entrega Notion

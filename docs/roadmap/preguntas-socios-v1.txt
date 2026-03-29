@@ -1,0 +1,205 @@
+RESUMMO — PREGUNTAS PARA SOCIOS
+Versión 1.0 · Marzo 2026
+-----------------------------------------------
+
+Instrucciones:
+Respondé estas preguntas con total honestidad después de leer el roadmap.
+No hay respuestas correctas. Necesitamos tu perspectiva real para ajustar
+la estrategia. Cuanto más específico seas, mejor.
+
+Cuando nos devuelvan las respuestas, actualizaremos el roadmap con su visión
+y afinaremos las prioridades de contenido, pricing y crecimiento.
+
+Tiempo estimado: 20–30 minutos.
+-----------------------------------------------
+
+
+A. VISIÓN A LARGO PLAZO
+-----------------------
+
+A1. ¿Cómo describís Resummo en 3 años? ¿Qué debería ser para los estudiantes
+    de medicina del Perú?
+
+
+
+
+A2. ¿Cuál es el mayor problema que Resummo resuelve HOY?
+    ¿Y cuál debería resolver en el futuro que hoy NO resuelve?
+
+
+
+
+A3. Si tuvieras que elegir UN solo mercado para dominar primero
+    (ENAM, SERUMS, Ciencias Básicas, EsSalud), ¿cuál sería y por qué?
+
+
+
+
+A4. ¿Ven a Resummo compitiendo con Villamedic / DrQuiz, o siendo algo
+    diferente? ¿Por qué?
+
+
+
+
+A5. ¿Qué los haría estar muy orgullosos de Resummo en 5 años?
+
+
+
+
+-----------------------------------------------
+B. CONTENIDO MÉDICO
+-----------------------------------------------
+
+B1. ¿Qué temas o áreas médicas son URGENTES de cubrir y aún no están
+    (o están mal cubiertos) en Resummo?
+
+
+
+
+B2. El pipeline propuesto es: IA genera borrador → Nair valida y ajusta
+    (30–45 min/tema) → publicar. Meta: 5 temas/semana.
+    ¿Es viable? ¿Qué cambiarías?
+
+
+
+
+B3. ¿Cómo describirías el estilo de los resúmenes de Resummo vs otros
+    materiales (libros, PDFs de compañeros, Villamedic)?
+    ¿Qué los hace únicos?
+
+
+
+
+B4. ¿Qué tan importante es alinearse a GPC MINSA vs usar guidelines
+    internacionales (AHA, IDSA, UpToDate)? ¿Cómo lo equilibrarías?
+
+
+
+
+B5. Si contrataras 1–2 médicos para ayudar con contenido, ¿qué perfil
+    tendrían? ¿Especialidad? ¿Año de carrera? ¿Residente o internista?
+
+
+
+
+B6. ¿Qué contenido les piden los estudiantes que Resummo NO debería hacer?
+    ¿Dónde está el límite del producto?
+
+
+
+
+-----------------------------------------------
+C. PERFIL DEL CLIENTE IDEAL
+-----------------------------------------------
+
+C1. Describí al estudiante que MÁS se beneficia de Resummo.
+    ¿Qué año de medicina está? ¿Qué objetivo tiene? ¿Qué le duele?
+
+
+
+
+C2. ¿Por qué un estudiante elegiría Resummo en lugar de estudiar directo
+    con Harrison, Robbins, o un PDF de YouTube?
+
+
+
+
+C3. ¿Cuál es el momento exacto en que un estudiante "necesita" Resummo?
+    (¿Inicio de ciclo? ¿3 semanas antes del ENAM? ¿Cuando reprueba un parcial?)
+
+
+
+
+C4. ¿Qué objeciones escuchan más seguido cuando alguien duda en comprar?
+    ¿Cómo las responderías?
+
+
+
+
+C5. ¿Hay segmentos que definitivamente NO son el cliente ideal de Resummo?
+    (Ej: médicos graduados con especialidad, estudiantes de primer año, etc.)
+
+
+
+
+-----------------------------------------------
+D. VALIDACIÓN DEL ROADMAP
+-----------------------------------------------
+
+D1. De las 5 fases del roadmap, ¿cuál les parece más realista de lograr?
+    ¿Cuál es la más difícil y por qué?
+
+
+
+
+D2. ¿Qué riesgo del roadmap les preocupa más?
+    (Ej: avance de AMBOSS, dependencia en un solo editor, CPA subiendo, etc.)
+
+
+
+
+D3. La meta de la Fase 1 es llegar a 500–800 clientes en 6 meses.
+    ¿Les parece alcanzable? ¿Por qué sí o no?
+
+
+
+
+D4. ¿Hay algo en el roadmap que definitivamente NO harían,
+    o que cambiarían significativamente?
+
+
+
+
+-----------------------------------------------
+E. EQUIPO Y ESCALAMIENTO
+-----------------------------------------------
+
+E1. ¿Cuántas horas semanales puede dedicar cada uno a Resummo hoy?
+    ¿Y si el negocio crece 5x en 6 meses?
+
+
+
+
+E2. Si Resummo crece significativamente, ¿cómo imaginan el equipo ideal?
+    ¿Quién hace qué? ¿Qué rol tendría cada uno?
+
+
+
+
+E3. ¿Conocen médicos de confianza (compañeros, residentes, internistas)
+    que podrían colaborar en validación de contenido?
+    ¿Bajo qué condiciones?
+
+
+
+
+-----------------------------------------------
+F. OBSERVACIONES LIBRES
+-----------------------------------------------
+
+Cualquier idea, preocupación, propuesta o reflexión que no haya sido
+cubierta en las preguntas anteriores. Sin límite.
+
+
+Observaciones de Andre:
+
+
+
+
+Observaciones de Nair:
+
+
+
+
+Puntos de desacuerdo o perspectivas distintas entre Andre y Nair
+(si las hay — es valioso capturarlas):
+
+
+
+
+-----------------------------------------------
+FIN DEL CUESTIONARIO
+-----------------------------------------------
+Gracias por tomarse el tiempo de responder esto.
+Con sus respuestas, actualizaremos el roadmap para reflejar
+una visión 100% realista y alineada entre los tres.

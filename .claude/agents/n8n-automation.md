@@ -95,6 +95,22 @@ Trigger (tipo)
   → Error branch: [nodo] — alerta/fallback
 ```
 
+### 3b. Decision Matrix — N8n vs Codigo vs Script Externo
+
+| Situacion | Usar |
+|-----------|------|
+| Integracion entre 2+ servicios con APIs existentes | n8n nativo |
+| Transformacion de datos simple (mapping, filtering) | n8n expresiones |
+| Trigger basado en eventos (webhook, cron, DB change) | n8n nativo |
+| Criptografia (HMAC, hash, JWT) | Code node (JS crypto) |
+| Transformacion compleja que expresiones no cubren | Code node (JS) |
+| Generacion de HTML/PDF | Code node (JS) |
+| Logica condicional con >3 branches | Code node (JS) |
+| ML / data analysis / pandas | Script externo (Python) via HTTP Request |
+| Procesamiento de archivos grandes (>10MB) | Script externo |
+| Dependencias npm/pip especificas | Script externo |
+| Logica reutilizada en >3 workflows | Sub-workflow o script externo |
+
 ### 4. Construir el workflow JSON
 
 Seguir el schema oficial:
@@ -131,6 +147,55 @@ Implementar estos patrones:
 3. **onError: continueErrorOutput** para manejar errores sin detener el workflow
 4. **Idempotencia** via transaction_id para evitar procesamiento duplicado
 5. **Fallback**: si todo falla → notificacion urgente, nunca dejar pago sin registrar
+
+#### Patrones avanzados de nivel agencia
+
+**Patron F — Circuit Breaker** (para APIs que fallan repetidamente)
+```javascript
+// En Code node — apertura del circuito tras 3 fallos consecutivos
+const state = $getWorkflowStaticData('node');
+const now = Date.now();
+const THRESHOLD = 3;
+const RESET_MS = 15 * 60 * 1000; // 15 min
+
+if (state.circuitOpen && (now - state.openedAt) < RESET_MS) {
+  throw new Error('Circuit OPEN — servicio no disponible, reintentando en 15 min');
+}
+if ((now - (state.openedAt || 0)) >= RESET_MS) {
+  state.failures = 0;
+  state.circuitOpen = false;
+}
+// Llamar al servicio... si falla:
+state.failures = (state.failures || 0) + 1;
+if (state.failures >= THRESHOLD) {
+  state.circuitOpen = true;
+  state.openedAt = now;
+}
+```
+
+**Patron G — Compensation Workflow (Rollback)**
+```
+Si falla notion-delivery DESPUES de Sheets.Append:
+  → Llamar compensation-handler workflow
+  → compensation-handler: Google Sheets Delete Row donde txn_id = $json.txn_id
+  → Marcar estado_entrega = "error_rollback"
+  → Alertar Santiago urgente
+Critico para mantener consistencia: pago registrado = entrega entregada
+```
+
+**Patron H — Exponential Backoff con Jitter**
+```javascript
+// Formula: delay = base * 2^attempt + jitter
+// En Code node antes de un Wait node
+const attempt = $json.attempt || 0;
+const base = 2000; // 2s base
+const maxDelay = 30000; // 30s max
+const jitter = Math.random() * base;
+const delay = Math.min(base * Math.pow(2, attempt) + jitter, maxDelay);
+return [{ json: { ...($json), delay, attempt: attempt + 1 } }];
+// Conectar a Wait node con: {{ $json.delay }}ms
+// Maximo 3 intentos antes de escalar
+```
 
 ### 7. Producir output
 
@@ -209,6 +274,45 @@ Webhook (rawBody: true)
           ├─ Execute Workflow: drive-delivery (si Anki)
           └─ Execute Workflow: confirmation-sender
       → Respond to Webhook: 200 OK
+```
+
+## AI Agent Node Patterns (n8n v1.74+)
+
+### Arquitecturas disponibles
+| Arquitectura | Cuando usar | Memoria |
+|-------------|-------------|---------|
+| Conversational Agent | Chatbots con historial de conversacion | Simple Memory (dev) / Postgres (prod) |
+| OpenAI Functions | Llamadas a funciones estructuradas, respuestas JSON | Sin memoria por defecto |
+| ReAct Agent | Tareas que requieren razonamiento + accion iterativa | Simple Memory (dev) / Redis (prod) |
+| Tools Agent | Agente con acceso a multiples herramientas | Configurable |
+| Plan-Execute | Planificacion primero, luego ejecucion | Sin memoria por defecto |
+| SQL Agent | Consultas a base de datos en lenguaje natural | Sin memoria por defecto |
+
+### Multi-agente (supervisor + sub-agentes)
+```
+AI Agent (Supervisor)
+  → AI Agent Tool (Sub-agente Ventas)
+      Tools: Google Sheets Lookup, respuestas de precios
+  → AI Agent Tool (Sub-agente Soporte)
+      Tools: verificar acceso, Google Sheets cliente
+  → HTTP Request Tool (llamadas directas a API)
+Supervisor decide que sub-agente activa segun intent del usuario
+```
+
+### Memoria persistente (OBLIGATORIO en produccion)
+- **Simple Memory** — solo para testing, se pierde al reiniciar
+- **Postgres Chat Memory** — para produccion: `SELECT * FROM n8n_chat_histories WHERE session_id = $json.subscriber_id`
+- **Redis Chat Memory** — alta performance, conversaciones activas
+- **Vector Store como Tool** — RAG: el agente puede buscar en base de conocimiento (Pinecone, Supabase pgvector)
+- Session ID para ManyChat: usar `subscriber_id` de ManyChat como session key
+
+### Timeout y fallback en agentes
+```
+AI Agent node → configurar maxIterations: 10, timeout: 8000ms
+  → Si supera limite: onError: continueErrorOutput
+  → Branch error: Respond to Webhook con mensaje generico
+  → Log en Google Sheets: session_id, error, timestamp
+NUNCA dejar ManyChat sin respuesta — siempre branch de fallback
 ```
 
 ## Rate limits conocidos
